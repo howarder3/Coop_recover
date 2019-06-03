@@ -12,11 +12,11 @@ class batch_norm(object):
 		return tf.contrib.layers.batch_norm(x, decay=self.momentum, updates_collections=None, epsilon=self.epsilon, scale=True, scope=self.name)
 
 
-def gen_encode_conv2d(input_image, output_dim, name="gen_encode_conv2d"):
+def sketcher_conv2d(input_image, output_dim, name="sketcher_conv2d"):
 	with tf.variable_scope(name):
 		# input_image shape = [batch_size, 256, 256, 3]
 		# weight shape = [filter_width, filter_height, input_channels, output_channels(num_filters)] = [5,5,3,64] 
-		weight = tf.get_variable('gen_encode_weight',[5,5,input_image.get_shape()[-1],output_dim],
+		weight = tf.get_variable('sketcher_weight',[5,5,input_image.get_shape()[-1],output_dim],
 								initializer=tf.truncated_normal_initializer(stddev=0.02))
 
 		# do convolution
@@ -39,13 +39,13 @@ def gen_encode_conv2d(input_image, output_dim, name="gen_encode_conv2d"):
 		return encode_conv_output
 
 
-def gen_decode_conv2d(input_image, output_dim, name="gen_decode_conv2d"):
+def gen_conv2d(input_image, output_dim, name="gen_conv2d"):
 	with tf.variable_scope(name):
 		# input_image shape = [batch_size, 1, 1, num_filter*8 *2(if concat)]
 		previous_layer_shape = input_image.get_shape()
 
 		# weight shape = [filter_width, filter_height, output_channels, input_channels] = [5,5,,] 
-		weight = tf.get_variable('gen_decode_weight',[5, 5, output_dim, previous_layer_shape[-1]],
+		weight = tf.get_variable('gen_weight',[5, 5, output_dim, previous_layer_shape[-1]],
 								initializer=tf.random_normal_initializer(stddev=0.02))
 
 		# output shape = [batch_size, input_shape*2, input_shape*2, output_dim]
