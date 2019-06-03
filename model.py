@@ -67,21 +67,21 @@ class Coop_pix2pix(object):
 		self.log_dir = log_dir
 		self.epoch_startpoint = 0
 
-		self.gen_encode_layer2_batchnorm = batch_norm(name='gen_encode_layer_2_batchnorm')
-		self.gen_encode_layer3_batchnorm = batch_norm(name='gen_encode_layer_3_batchnorm')
-		self.gen_encode_layer4_batchnorm = batch_norm(name='gen_encode_layer_4_batchnorm')
-		self.gen_encode_layer5_batchnorm = batch_norm(name='gen_encode_layer_5_batchnorm')
-		self.gen_encode_layer6_batchnorm = batch_norm(name='gen_encode_layer_6_batchnorm')
-		self.gen_encode_layer7_batchnorm = batch_norm(name='gen_encode_layer_7_batchnorm')
-		self.gen_encode_layer8_batchnorm = batch_norm(name='gen_encode_layer_8_batchnorm')
+		self.sketcher_layer2_batchnorm = batch_norm(name='sketcher_layer_2_batchnorm')
+		self.sketcher_layer3_batchnorm = batch_norm(name='sketcher_layer_3_batchnorm')
+		self.sketcher_layer4_batchnorm = batch_norm(name='sketcher_layer_4_batchnorm')
+		self.sketcher_layer5_batchnorm = batch_norm(name='sketcher_layer_5_batchnorm')
+		self.sketcher_layer6_batchnorm = batch_norm(name='sketcher_layer_6_batchnorm')
+		self.sketcher_layer7_batchnorm = batch_norm(name='sketcher_layer_7_batchnorm')
+		self.sketcher_layer8_batchnorm = batch_norm(name='sketcher_layer_8_batchnorm')
 
-		self.gen_decode_layer1_batchnorm = batch_norm(name='gen_decode_layer_1_batchnorm')
-		self.gen_decode_layer2_batchnorm = batch_norm(name='gen_decode_layer_2_batchnorm')
-		self.gen_decode_layer3_batchnorm = batch_norm(name='gen_decode_layer_3_batchnorm')
-		self.gen_decode_layer4_batchnorm = batch_norm(name='gen_decode_layer_4_batchnorm')
-		self.gen_decode_layer5_batchnorm = batch_norm(name='gen_decode_layer_5_batchnorm')
-		self.gen_decode_layer6_batchnorm = batch_norm(name='gen_decode_layer_6_batchnorm')
-		self.gen_decode_layer7_batchnorm = batch_norm(name='gen_decode_layer_7_batchnorm')
+		self.gen_layer1_batchnorm = batch_norm(name='gen_layer_1_batchnorm')
+		self.gen_layer2_batchnorm = batch_norm(name='gen_layer_2_batchnorm')
+		self.gen_layer3_batchnorm = batch_norm(name='gen_layer_3_batchnorm')
+		self.gen_layer4_batchnorm = batch_norm(name='gen_layer_4_batchnorm')
+		self.gen_layer5_batchnorm = batch_norm(name='gen_layer_5_batchnorm')
+		self.gen_layer6_batchnorm = batch_norm(name='gen_layer_6_batchnorm')
+		self.gen_layer7_batchnorm = batch_norm(name='gen_layer_7_batchnorm')
 
 		self.des_layer_1_batchnorm = batch_norm(name='des_layer_1_batchnorm')
 		self.des_layer_2_batchnorm = batch_norm(name='des_layer_2_batchnorm')
@@ -104,10 +104,15 @@ class Coop_pix2pix(object):
 				[self.batch_size, self.image_size, self.image_size, self.input_pic_dim],
 				name='input_real_data_A')
 
+		self.input_sketched_A = tf.placeholder(tf.float32,
+				[self.batch_size, 1, 1, 64*8],
+				name='input_real_data_A')
+
 	def build_model(self):
 
 		# generator 
-		self.generated_B = self.generator(self.input_real_data_A, reuse = False)
+		self.sketched_A = self.sketcher(self.input_real_data_A, reuse = False)
+		self.generated_B = self.generator(self.input_sketched_A, reuse = False)
 
 		# descriptor
 		described_real_data_B = self.descriptor(self.input_real_data_B, reuse=False)
@@ -209,7 +214,8 @@ class Coop_pix2pix(object):
 				data_B = batch_images[:, :, :, self.input_pic_dim:self.input_pic_dim+self.output_pic_dim] 
 
 				# step G1: try to generate B domain(target domain) picture
-				generated_B = sess.run(self.generated_B, feed_dict={self.input_real_data_A: data_A})
+				sketched_A = sess.run(self.sketched_A, feed_dict={self.input_real_data_A: data_A})
+				generated_B = sess.run(self.generated_B, feed_dict={self.input_sketched_A: sketched_A})
 
 				# step D1: descriptor try to revised image:"generated_B"
 				revised_B = sess.run(self.des_langevin_revision_output, feed_dict={self.input_revised_B: generated_B})
@@ -286,101 +292,98 @@ class Coop_pix2pix(object):
 			# 	'time: {:.2f}s'.format(epoch, np.mean(des_loss_avg), np.mean(gen_loss_avg), np.mean(mse_avg), time.time() - start_time))
 
 
+	def sketcher(self, input_image, reuse=False):
+		with tf.variable_scope("sketch", reuse=reuse):
+
+			num_filter = 64
+
+			# sketcher_layer_1_output = (batch_size, 128, 128, num_filter)
+			sketcher_layer_1_conv = sketcher_conv2d(input_image, num_filter, name='sketcher_layer_1_conv') 
+
+			# sketcher_layer_2_output = (batch_size, 64, 64, num_filter*2)
+			sketcher_layer_2_conv = sketcher_conv2d(leaky_relu(sketcher_layer_1_conv), num_filter*2, name='sketcher_layer_2_conv') 
+			sketcher_layer_2_batchnorm = self.sketcher_layer2_batchnorm(sketcher_layer_2_conv)
+			
+			# sketcher_layer_3_output = (batch_size, 32, 32, num_filter*4)
+			sketcher_layer_3_conv = sketcher_conv2d(leaky_relu(sketcher_layer_2_batchnorm), num_filter*4, name='sketcher_layer_3_conv')
+			sketcher_layer_3_batchnorm = self.sketcher_layer3_batchnorm(sketcher_layer_3_conv)
+
+			# sketcher_layer_4_output = (batch_size, 16, 16, num_filter*8)
+			sketcher_layer_4_conv = sketcher_conv2d(leaky_relu(sketcher_layer_3_batchnorm), num_filter*8, name='sketcher_layer_4_conv') 
+			sketcher_layer_4_batchnorm = self.sketcher_layer4_batchnorm(sketcher_layer_4_conv)
+
+			# sketcher_layer_5_output = (batch_size, 8, 8, num_filter*8)
+			sketcher_layer_5_conv = sketcher_conv2d(leaky_relu(sketcher_layer_4_batchnorm), num_filter*8, name='sketcher_layer_5_conv') 
+			sketcher_layer_5_batchnorm = self.sketcher_layer5_batchnorm(sketcher_layer_5_conv)
+
+			# sketcher_layer_6_output = (batch_size, 4, 4, num_filter*8)
+			sketcher_layer_6_conv = sketcher_conv2d(leaky_relu(sketcher_layer_5_batchnorm), num_filter*8, name='sketcher_layer_6_conv') 
+			sketcher_layer_6_batchnorm = self.sketcher_layer6_batchnorm(sketcher_layer_6_conv)
+
+			# sketcher_layer_7_output = (batch_size, 2, 2, num_filter*8)
+			sketcher_layer_7_conv = sketcher_conv2d(leaky_relu(sketcher_layer_6_batchnorm), num_filter*8, name='sketcher_layer_7_conv') 
+			sketcher_layer_7_batchnorm = self.sketcher_layer7_batchnorm(sketcher_layer_7_conv)
+
+			# sketcher_layer_8_output = (batch_size, 1, 1, num_filter*8)
+			sketcher_layer_8_conv = sketcher_conv2d(leaky_relu(sketcher_layer_7_batchnorm), num_filter*8, name='sketcher_layer_8_conv') 
+			sketcher_layer_8_batchnorm = self.sketcher_layer8_batchnorm(sketcher_layer_8_conv)
+			sketcher_output = relu(sketcher_layer_8_batchnorm)
+
+			return sketcher_output
+
+
 
 	def generator(self, input_image, reuse=False):
 		with tf.variable_scope("gen", reuse=reuse):
 
-			# print("\n------  generator layers shape  ------\n")
-			# print("input_image shape: {}".format(input_image.shape))
-
-
 			num_filter = 64
 
-			# ---------- encoder part ----------
-			# gen_encode_conv2d(input_image, output_dimension (by how many filters), scope_name)
-			# input image = [batch_size, 256, 256, input_pic_dim]
+			# gen_layer_1_output = (batch_size, 2, 2, num_filter*8*2)
+			gen_layer_1_deconv = gen_conv2d(input_image, num_filter*8, name='gen_layer_1_deconv') 
+			gen_layer_1_batchnorm = self.gen_layer1_batchnorm(gen_layer_1_deconv)
+			gen_layer_1_dropout = tf.nn.dropout(gen_layer_1_batchnorm, rate=0.5)
+			gen_layer_1_concat = tf.concat([gen_layer_1_dropout, sketcher_layer_7_batchnorm], 3)
 
-			# gen_encode_layer_1_output = (batch_size, 128, 128, num_filter)
-			gen_encode_layer_1_conv = gen_encode_conv2d(input_image, num_filter, name='gen_encode_layer_1_conv') 
+			# gen_layer_2_output = (batch_size, 4, 4, num_filter*8*2)
+			gen_layer_2_deconv = gen_conv2d(relu(gen_layer_1_concat), num_filter*8, name='gen_layer_2_deconv') 
+			gen_layer_2_batchnorm = self.gen_layer2_batchnorm(gen_layer_2_deconv)
+			gen_layer_2_dropout = tf.nn.dropout(gen_layer_2_batchnorm, rate=0.5)
+			gen_layer_2_concat = tf.concat([gen_layer_2_dropout, sketcher_layer_6_batchnorm], 3)
 
-			# gen_encode_layer_2_output = (batch_size, 64, 64, num_filter*2)
-			gen_encode_layer_2_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_1_conv), num_filter*2, name='gen_encode_layer_2_conv') 
-			gen_encode_layer_2_batchnorm = self.gen_encode_layer2_batchnorm(gen_encode_layer_2_conv)
-			
-			# gen_encode_layer_3_output = (batch_size, 32, 32, num_filter*4)
-			gen_encode_layer_3_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_2_batchnorm), num_filter*4, name='gen_encode_layer_3_conv')
-			gen_encode_layer_3_batchnorm = self.gen_encode_layer3_batchnorm(gen_encode_layer_3_conv)
+			# gen_layer_3_output = (batch_size, 8, 8, num_filter*8*2)
+			gen_layer_3_deconv = gen_conv2d(relu(gen_layer_2_concat), num_filter*8, name='gen_layer_3_deconv') 
+			gen_layer_3_batchnorm = self.gen_layer3_batchnorm(gen_layer_3_deconv)
+			gen_layer_3_dropout = tf.nn.dropout(gen_layer_3_batchnorm, rate=0.5)
+			gen_layer_3_concat = tf.concat([gen_layer_3_dropout, sketcher_layer_5_batchnorm], 3)
 
-			# gen_encode_layer_4_output = (batch_size, 16, 16, num_filter*8)
-			gen_encode_layer_4_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_3_batchnorm), num_filter*8, name='gen_encode_layer_4_conv') 
-			gen_encode_layer_4_batchnorm = self.gen_encode_layer4_batchnorm(gen_encode_layer_4_conv)
+			# gen_layer_4_output = (batch_size, 16, 16, num_filter*8*2)
+			gen_layer_4_deconv = gen_conv2d(relu(gen_layer_3_concat), num_filter*8, name='gen_layer_4_deconv') 
+			gen_layer_4_batchnorm = self.gen_layer4_batchnorm(gen_layer_4_deconv)
+			gen_layer_4_dropout = tf.nn.dropout(gen_layer_4_batchnorm, rate=0.5)
+			gen_layer_4_concat = tf.concat([gen_layer_4_dropout, sketcher_layer_4_batchnorm], 3)
 
-			# gen_encode_layer_5_output = (batch_size, 8, 8, num_filter*8)
-			gen_encode_layer_5_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_4_batchnorm), num_filter*8, name='gen_encode_layer_5_conv') 
-			gen_encode_layer_5_batchnorm = self.gen_encode_layer5_batchnorm(gen_encode_layer_5_conv)
+			# gen_layer_5_output = (batch_size, 32, 32, num_filter*4*2)
+			gen_layer_5_deconv = gen_conv2d(relu(gen_layer_4_concat), num_filter*4, name='gen_layer_5_deconv') 
+			gen_layer_5_batchnorm = self.gen_layer5_batchnorm(gen_layer_5_deconv)
+			gen_layer_5_dropout = tf.nn.dropout(gen_layer_5_batchnorm, rate=0.5)
+			gen_layer_5_concat = tf.concat([gen_layer_5_dropout, sketcher_layer_3_batchnorm], 3)
 
-			# gen_encode_layer_6_output = (batch_size, 4, 4, num_filter*8)
-			gen_encode_layer_6_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_5_batchnorm), num_filter*8, name='gen_encode_layer_6_conv') 
-			gen_encode_layer_6_batchnorm = self.gen_encode_layer6_batchnorm(gen_encode_layer_6_conv)
+			# gen_layer_6_output = (batch_size, 64, 64, num_filter*2*2)
+			gen_layer_6_deconv = gen_conv2d(relu(gen_layer_5_concat), num_filter*2, name='gen_layer_6_deconv') 
+			gen_layer_6_batchnorm = self.gen_layer6_batchnorm(gen_layer_6_deconv)
+			gen_layer_6_dropout = tf.nn.dropout(gen_layer_6_batchnorm, rate=0.5)
+			gen_layer_6_concat = tf.concat([gen_layer_6_dropout, sketcher_layer_2_batchnorm], 3)
 
-			# gen_encode_layer_7_output = (batch_size, 2, 2, num_filter*8)
-			gen_encode_layer_7_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_6_batchnorm), num_filter*8, name='gen_encode_layer_7_conv') 
-			gen_encode_layer_7_batchnorm = self.gen_encode_layer7_batchnorm(gen_encode_layer_7_conv)
-
-			# gen_encode_layer_8_output = (batch_size, 1, 1, num_filter*8)
-			gen_encode_layer_8_conv = gen_encode_conv2d(leaky_relu(gen_encode_layer_7_batchnorm), num_filter*8, name='gen_encode_layer_8_conv') 
-			gen_encode_layer_8_batchnorm = self.gen_encode_layer8_batchnorm(gen_encode_layer_8_conv)
-
-			# ---------- decoder part ----------
-			# gen_decode_conv2d(input_image, output_dimension (by how many filters), scope_name)
-			# input image = [batch_size, 1, 1, num_filter*8]
-
-			# gen_decode_layer_1_output = (batch_size, 2, 2, num_filter*8*2)
-			gen_decode_layer_1_deconv = gen_decode_conv2d(relu(gen_encode_layer_8_batchnorm), num_filter*8, name='gen_decode_layer_1_deconv') 
-			gen_decode_layer_1_batchnorm = self.gen_decode_layer1_batchnorm(gen_decode_layer_1_deconv)
-			gen_decode_layer_1_dropout = tf.nn.dropout(gen_decode_layer_1_batchnorm, rate=0.5)
-			gen_decode_layer_1_concat = tf.concat([gen_decode_layer_1_dropout, gen_encode_layer_7_batchnorm], 3)
-
-			# gen_decode_layer_2_output = (batch_size, 4, 4, num_filter*8*2)
-			gen_decode_layer_2_deconv = gen_decode_conv2d(relu(gen_decode_layer_1_concat), num_filter*8, name='gen_decode_layer_2_deconv') 
-			gen_decode_layer_2_batchnorm = self.gen_decode_layer2_batchnorm(gen_decode_layer_2_deconv)
-			gen_decode_layer_2_dropout = tf.nn.dropout(gen_decode_layer_2_batchnorm, rate=0.5)
-			gen_decode_layer_2_concat = tf.concat([gen_decode_layer_2_dropout, gen_encode_layer_6_batchnorm], 3)
-
-			# gen_decode_layer_3_output = (batch_size, 8, 8, num_filter*8*2)
-			gen_decode_layer_3_deconv = gen_decode_conv2d(relu(gen_decode_layer_2_concat), num_filter*8, name='gen_decode_layer_3_deconv') 
-			gen_decode_layer_3_batchnorm = self.gen_decode_layer3_batchnorm(gen_decode_layer_3_deconv)
-			gen_decode_layer_3_dropout = tf.nn.dropout(gen_decode_layer_3_batchnorm, rate=0.5)
-			gen_decode_layer_3_concat = tf.concat([gen_decode_layer_3_dropout, gen_encode_layer_5_batchnorm], 3)
-
-			# gen_decode_layer_4_output = (batch_size, 16, 16, num_filter*8*2)
-			gen_decode_layer_4_deconv = gen_decode_conv2d(relu(gen_decode_layer_3_concat), num_filter*8, name='gen_decode_layer_4_deconv') 
-			gen_decode_layer_4_batchnorm = self.gen_decode_layer4_batchnorm(gen_decode_layer_4_deconv)
-			gen_decode_layer_4_dropout = tf.nn.dropout(gen_decode_layer_4_batchnorm, rate=0.5)
-			gen_decode_layer_4_concat = tf.concat([gen_decode_layer_4_dropout, gen_encode_layer_4_batchnorm], 3)
-
-			# gen_decode_layer_5_output = (batch_size, 32, 32, num_filter*4*2)
-			gen_decode_layer_5_deconv = gen_decode_conv2d(relu(gen_decode_layer_4_concat), num_filter*4, name='gen_decode_layer_5_deconv') 
-			gen_decode_layer_5_batchnorm = self.gen_decode_layer5_batchnorm(gen_decode_layer_5_deconv)
-			gen_decode_layer_5_dropout = tf.nn.dropout(gen_decode_layer_5_batchnorm, rate=0.5)
-			gen_decode_layer_5_concat = tf.concat([gen_decode_layer_5_dropout, gen_encode_layer_3_batchnorm], 3)
-
-			# gen_decode_layer_6_output = (batch_size, 64, 64, num_filter*2*2)
-			gen_decode_layer_6_deconv = gen_decode_conv2d(relu(gen_decode_layer_5_concat), num_filter*2, name='gen_decode_layer_6_deconv') 
-			gen_decode_layer_6_batchnorm = self.gen_decode_layer6_batchnorm(gen_decode_layer_6_deconv)
-			gen_decode_layer_6_dropout = tf.nn.dropout(gen_decode_layer_6_batchnorm, rate=0.5)
-			gen_decode_layer_6_concat = tf.concat([gen_decode_layer_6_dropout, gen_encode_layer_2_batchnorm], 3)
-
-			# gen_decode_layer_7_output = (batch_size, 128, 128, num_filter*1*2)
-			gen_decode_layer_7_deconv = gen_decode_conv2d(relu(gen_decode_layer_6_concat), num_filter, name='gen_decode_layer_7_deconv') 
-			gen_decode_layer_7_batchnorm = self.gen_decode_layer7_batchnorm(gen_decode_layer_7_deconv)
-			gen_decode_layer_7_dropout = tf.nn.dropout(gen_decode_layer_7_batchnorm, rate=0.5)
-			gen_decode_layer_7_concat = tf.concat([gen_decode_layer_7_dropout, gen_encode_layer_1_conv], 3)
+			# gen_layer_7_output = (batch_size, 128, 128, num_filter*1*2)
+			gen_layer_7_deconv = gen_conv2d(relu(gen_layer_6_concat), num_filter, name='gen_layer_7_deconv') 
+			gen_layer_7_batchnorm = self.gen_layer7_batchnorm(gen_layer_7_deconv)
+			gen_layer_7_dropout = tf.nn.dropout(gen_layer_7_batchnorm, rate=0.5)
+			gen_layer_7_concat = tf.concat([gen_layer_7_dropout, sketcher_layer_1_conv], 3)
 
 
-			# gen_decode_layer_8_output = (batch_size, 256, 256, output_pic_dim)
-			gen_decode_layer_8_deconv = gen_decode_conv2d(relu(gen_decode_layer_7_concat), self.output_pic_dim, name='gen_decode_layer_8_deconv') 
-			generator_output = tf.nn.tanh(gen_decode_layer_8_deconv)
+			# gen_layer_8_output = (batch_size, 256, 256, output_pic_dim)
+			gen_layer_8_deconv = gen_conv2d(relu(gen_layer_7_concat), self.output_pic_dim, name='gen_layer_8_deconv') 
+			generator_output = tf.nn.tanh(gen_layer_8_deconv)
 
 			return generator_output
 
